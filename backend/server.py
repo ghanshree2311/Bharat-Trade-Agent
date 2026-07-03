@@ -556,6 +556,45 @@ async def test_telegram():
     return {"ok": True}
 
 
+@api_router.post("/settings/telegram/autodetect")
+async def telegram_autodetect_chat_id():
+    """Fetch getUpdates from Telegram and auto-save the most recent chat_id."""
+    s = await _get_settings()
+    token = s.get("telegram_bot_token")
+    if not token:
+        raise HTTPException(400, "Save Telegram bot token first")
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    try:
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.get(url)
+            data = r.json()
+    except Exception as e:
+        raise HTTPException(400, f"Telegram fetch failed: {e}")
+    if not data.get("ok"):
+        raise HTTPException(400, f"Telegram error: {data}")
+    updates = data.get("result", [])
+    if not updates:
+        raise HTTPException(
+            400,
+            "No messages found. Open Telegram, message your bot with anything (e.g. 'hi'), then click Auto-detect again.",
+        )
+    # take latest chat id
+    chat_id = None
+    for u in reversed(updates):
+        m = u.get("message") or u.get("channel_post")
+        if m and m.get("chat", {}).get("id"):
+            chat_id = m["chat"]["id"]
+            break
+    if not chat_id:
+        raise HTTPException(400, "Couldn't find a chat id in updates")
+    await db.settings.update_one(
+        {"id": SETTINGS_ID}, {"$set": {"telegram_chat_id": str(chat_id)}}, upsert=True
+    )
+    # send confirmation
+    await _send_telegram(f"<b>✅ Bharat Trade Agent is now connected</b>\nChat ID: <code>{chat_id}</code>")
+    return {"ok": True, "chat_id": str(chat_id)}
+
+
 # ============ Alerts ============
 class AlertCreate(BaseModel):
     symbol: str

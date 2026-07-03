@@ -152,13 +152,32 @@ export default function SettingsDialog({ onChange }) {
                 className="mono rounded-sm mt-1 border-[#E5E7EB]"
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 onClick={saveTelegram} disabled={saving}
                 data-testid="save-telegram-btn"
                 className="rounded-sm bg-[#0A0A0A] hover:bg-[#262626] text-white"
               >
                 {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    const { data } = await api.post("/settings/telegram/autodetect");
+                    toast.success(`Detected chat ID ${data.chat_id} — Telegram connected!`);
+                    await load(); onChange?.();
+                  } catch (e) {
+                    toast.error(e?.response?.data?.detail || "Auto-detect failed");
+                  }
+                  setSaving(false);
+                }}
+                data-testid="autodetect-telegram-btn"
+                variant="outline"
+                className="rounded-sm border-[#2563EB] text-[#2563EB] hover:bg-[#EFF6FF] gap-2"
+              >
+                <ArrowsClockwise size={14} weight="bold" />
+                Auto-detect Chat ID
               </Button>
               <Button
                 onClick={testTelegram}
