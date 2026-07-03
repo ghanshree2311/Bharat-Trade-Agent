@@ -1,0 +1,85 @@
+{
+  "theme": "Light",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "vibe": "Institutional, data-dense, functional beauty, confident",
+  "color_palette": {
+    "background_primary": "#FFFFFF",
+    "background_secondary": "#F3F4F6",
+    "surface": "#FFFFFF",
+    "text_primary": "#0A0A0A",
+    "text_secondary": "#525252",
+    "border": "#E5E7EB",
+    "accent_profit": "#059669", 
+    "accent_profit_bg": "#D1FAE5",
+    "accent_loss": "#DC2626",
+    "accent_loss_bg": "#FEE2E2",
+    "accent_brand": "#2563EB",
+    "accent_warning": "#D97706"
+  },
+  "typography": {
+    "headings_font": "Outfit, sans-serif",
+    "body_font": "IBM Plex Sans, sans-serif",
+    "mono_font": "IBM Plex Mono, monospace",
+    "font_weights": {
+      "headings": "600",
+      "body": "400",
+      "mono": "500"
+    },
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl tracking-tight text-[#0A0A0A]",
+      "h2": "text-2xl sm:text-3xl tracking-tight text-[#0A0A0A]",
+      "h3": "text-lg sm:text-xl font-medium",
+      "body": "text-sm text-[#525252] leading-relaxed",
+      "financial_data": "font-mono text-sm tracking-tight",
+      "ticker_chip": "font-mono text-xs uppercase tracking-[0.05em]"
+    }
+  },
+  "spacing_and_layout": {
+    "grid_system": "MODE B: THE CONTROL ROOM GRID. Dense, data correlation. Base grid: grid-cols-1 md:grid-cols-3 lg:grid-cols-4. Gap strategy: gap-4 or gap-6. Use col-span-1 for summaries, col-span-2 or 3 for main tables/charts.",
+    "container_padding": "p-6 md:p-8",
+    "card_padding": "p-4 md:p-5",
+    "alignment": "Left-align dense content, labels, inputs, tabular data. Right-align numerical columns in tables (prices, P/L) so decimals align perfectly.",
+    "border_radius": "rounded-none or rounded-sm (max 4px). Sharp edges."
+  },
+  "surface_strategy": {
+    "cards": "Flat background, 1px subtle border (border-[#E5E7EB]), zero shadow. Strict grid layout.",
+    "hover_state": "Slight background darkening (hover:bg-gray-50), do NOT use translate-y for dense tables.",
+    "interactive_elements": "Hover state must be a lighter hue of the active state. Focus states must have high contrast rings."
+  },
+  "component_guidelines": {
+    "holdings_table": "Shadcn Table. Dense layout. Ticker symbols wrapped in a subtle badge. P/L column color-coded with accent_profit (green) and accent_loss (red).",
+    "ai_recommendations_panel": "Split into 3 sections (Safe Exits, New Buys, Value Picks). Use Shadcn Cards with solid borders. Differentiate sections with subtle icon cues. Use crisp, actionable microcopy.",
+    "add_edit_stock_form": "Shadcn Form/Dialog. Two-column layout for desktop. Input fields should be flush and cleanly aligned.",
+    "market_overview": "Top bar or distinct widget using 'ticker tape' style horizontal scroll (react-fast-marquee) or dense grid. Display Nifty 50 and Sensex clearly.",
+    "stock_detail_view": "Shadcn Tabs (Overview, AI Analysis, Fundamentals). Use Recharts for sparklines/trend line. No fancy gradient fills on charts, just a solid 2px line (green or red based on trend)."
+  },
+  "icons_and_assets": {
+    "icon_library": "@phosphor-icons/react",
+    "icon_style": "Duotone or Regular weight. Functional, not decorative.",
+    "image_urls": {
+      "ai_agent_avatar": {
+        "url": "https://images.unsplash.com/photo-1589386417686-0d34b5903d23",
+        "description": "Professional avatar representing the AI Trade Agent"
+      }
+    }
+  },
+  "motion_and_interactions": {
+    "transitions": "transition-colors duration-150 ease-in-out",
+    "loading_state": "Shadcn Skeleton blocks for data tables, mimicking the 'F-Pattern' layout.",
+    "tooltips": "Fast tooltips (delay 100ms) for acronyms or AI reasoning snippets."
+  },
+  "accessibility": {
+    "contrast": "Ensure pure black/dark grey on white for data. Minimum 4.5:1 ratio.",
+    "data_testid": "MANDATORY. Add 'data-testid' to all buttons, form inputs, table rows, and tab triggers using kebab-case role-based naming (e.g., 'add-holding-button', 'stock-row-hdfc')."
+  },
+  "instructions_to_main_agent": [
+    "Install required fonts from Google Fonts: Outfit, IBM Plex Sans, IBM Plex Mono.",
+    "Install @phosphor-icons/react for icons.",
+    "Initialize Shadcn UI and add components: table, card, button, dialog, input, form, badge, tabs, skeleton.",
+    "Use pure HTML/Tailwind for the rigid grid structure. Grid children MUST be direct children.",
+    "DO NOT use generic colors like teal or purple. Stick strictly to the defined stark white/grey base with red/green financial indicators.",
+    "Right-align all numerical values in tables to ensure decimal points align.",
+    "Wrap ticker symbols in a small monospace badge for clear scannability.",
+    "Ensure 'data-testid' is present on all interactive elements as requested in CRITICAL RULES."
+  ]
+}
