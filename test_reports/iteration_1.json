@@ -1,0 +1,26 @@
+{
+  "summary": "First-finish smoke test of Bharat Trade Agent. Backend healthcheck, market overview, quote (RELIANCE.NS), holdings CRUD, watchlist CRUD, and AI recommendations (POST + latest) all returned 200 with expected fields. Frontend UI: dashboard loads, market ticker + summary render, Add Holding dialog works, RELIANCE holding appears with live LTP ₹1304, invested ₹25000, P/L -₹11960 (-47.84%), watchlist add (ITC) works with live price, Generate Insights populates all 3 AI sections + portfolio-health, delete holding removes row.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/ -> 200 {'message':'Bharat Trade Agent API'}",
+    "GET /api/market/overview -> 4 indices with live prices",
+    "GET /api/quote/RELIANCE -> quote + history returned (RELIANCE.NS, ₹1304)",
+    "POST /api/holdings -> creates holding with UUID",
+    "GET /api/holdings -> enriched with current_price, pnl, day_change; summary aggregated",
+    "DELETE /api/holdings/{id} -> {ok:true}",
+    "POST/GET/DELETE /api/watchlist -> ITC enriched with live price ₹289.95",
+    "POST /api/ai/recommendations -> returned safe_exits/new_buys/long_term_picks with live-price enrichment (ICICIBANK, BHARTIARTL, LT, SUNPHARMA, NTPC)",
+    "GET /api/ai/recommendations/latest -> returns persisted recs",
+    "Frontend: dashboard, market-ticker, portfolio-summary render",
+    "Frontend: Add Holding dialog flow works end-to-end",
+    "Frontend: Watchlist add (ITC) shows live price/change",
+    "Frontend: Generate Insights populates section-exits, section-buys, section-longterm, portfolio-health",
+    "Frontend: Delete holding removes row and updates summary"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "AI call took ~20-30s as expected. yfinance returned non-zero live quotes. No console errors observed during core flow. test_credentials.md not applicable (no auth)."
+}
