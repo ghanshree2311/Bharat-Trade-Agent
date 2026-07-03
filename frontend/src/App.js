@@ -10,6 +10,8 @@ import PortfolioTable from "./components/PortfolioTable";
 import AddHoldingDialog from "./components/AddHoldingDialog";
 import AIRecommendations from "./components/AIRecommendations";
 import Watchlist from "./components/Watchlist";
+import SettingsDialog from "./components/SettingsDialog";
+import AlertsPanel from "./components/AlertsPanel";
 
 function Dashboard() {
   const [portfolio, setPortfolio] = useState({ holdings: [], summary: {} });
@@ -45,7 +47,10 @@ function Dashboard() {
               <p className="mono text-[10px] uppercase tracking-[0.1em] text-[#525252]">NSE · BSE · AI-Powered Analysis</p>
             </div>
           </div>
-          <AddHoldingDialog onAdded={load} />
+          <div className="flex items-center gap-2">
+            <SettingsDialog onChange={load} />
+            <AddHoldingDialog onAdded={load} />
+          </div>
         </div>
       </header>
 
@@ -67,7 +72,8 @@ function Dashboard() {
           <div className="lg:col-span-3">
             <AIRecommendations hasHoldings={(portfolio.holdings || []).length > 0} />
           </div>
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            <AlertsPanel />
             <Watchlist />
           </div>
         </section>

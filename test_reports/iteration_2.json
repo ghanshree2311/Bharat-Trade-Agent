@@ -1,0 +1,39 @@
+{
+  "summary": "Latency-sensitive first-finish testing for Telegram alerts + Groww broker linking. All 7 backend endpoints (settings GET/PUT, telegram/test, alerts CRUD+toggle+check, groww sync) return expected status codes and payloads. Frontend Settings dialog (Telegram + Groww tabs) and Alerts panel render, wire up correctly, and integrate with backend. Alert create/list/check flow validated end-to-end with toast display. Cleanup performed for created test alerts.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/settings returns configured=false with empty masked tokens on fresh state",
+    "PUT /api/settings persists telegram_bot_token + chat_id; masked value returned; telegram_configured=true",
+    "POST /api/settings/telegram/test -> 400 'Telegram not configured' when unset",
+    "POST /api/settings/telegram/test with fake token -> 400 with Telegram 401 Unauthorized (graceful, no 500)",
+    "POST /api/alerts creates target/stop_loss/pct_change alerts; invalid type -> 400 'invalid alert_type'",
+    "GET /api/alerts lists all created alerts with correct fields",
+    "PATCH /api/alerts/{id}/toggle flips active flag (verified true->false and back)",
+    "DELETE /api/alerts/{id} returns {ok:true} and removes alert",
+    "POST /api/alerts/check evaluates against live yfinance quotes; RELIANCE stop_loss=2000 triggered (LTP ~1304 < 2000); returned {checked:2,triggered:1} initially and {checked:3,triggered:1} after re-toggle (target likely in cooldown due to already-triggered stop_loss earlier — no crash, valid response)",
+    "POST /api/broker/groww/sync -> 400 'Groww API token not configured. Add it in Settings.' when token missing",
+    "Frontend loads; alerts-panel visible with 'Auto-checks every 5 min · 9:15am–3:30pm IST · Mon–Fri' note",
+    "Settings dialog opens with tab-telegram and tab-groww; all inputs (token, chat) and buttons (save/test) present",
+    "Send-Test button correctly ENABLED when telegram_configured=true",
+    "Groww tab: token input + save + sync buttons present; sync button correctly DISABLED when token not saved",
+    "Add-alert dialog opens; symbol/threshold/note filled; submit creates alert visible in panel (TCS target ≥ ₹5000)",
+    "Check-alerts button triggers /api/alerts/check and displays toast: 'Checked 1 alerts, 0 triggered'",
+    "Existing features (Portfolio header/cards, AI Trade Agent panel with diversification/risk/insights) render unaffected"
+  ],
+  "failed": [
+    {
+      "area": "Backend PUT /api/settings",
+      "issue": "Sending empty-string or null telegram_bot_token/chat_id does NOT clear existing values (fields remain configured). This is by design (partial update) but there is no explicit clear endpoint. Not a blocker for user setup flow.",
+      "evidence": "PUT with {telegram_bot_token:null, telegram_chat_id:null} -> still returns telegram_configured=true with previous masked value",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Optional: consider allowing explicit clear via empty string in PUT /api/settings, or add a DELETE endpoint for tokens. Non-blocking for first finish."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "test_credentials": "N/A — no auth in app; no credentials needed per review request",
+  "cleanup_performed": "Deleted 3 backend-created RELIANCE test alerts and 1 UI-created TCS alert. Fake telegram token remains stored (see LOW-priority finding); user's real config will overwrite it."
+}

@@ -14,6 +14,9 @@ import yfinance as yf
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import json
 import re
+import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -475,6 +478,263 @@ Return JSON:
     if not parsed:
         raise HTTPException(500, f"AI parse failed: {raw[:200]}")
     return {"quote": q, "analysis": parsed}
+
+
+# ============ Settings (Telegram + Groww creds stored in DB) ============
+SETTINGS_ID = "user_settings"
+
+
+class Settings(BaseModel):
+    telegram_bot_token: Optional[str] = ""
+    telegram_chat_id: Optional[str] = ""
+    groww_api_token: Optional[str] = ""
+
+
+async def _get_settings() -> dict:
+    doc = await db.settings.find_one({"id": SETTINGS_ID}, {"_id": 0})
+    if not doc:
+        doc = {"id": SETTINGS_ID, "telegram_bot_token": "", "telegram_chat_id": "", "groww_api_token": ""}
+        await db.settings.insert_one(doc)
+        doc.pop("_id", None)
+    return doc
+
+
+def _mask(s: str) -> str:
+    if not s or len(s) < 6:
+        return ""
+    return s[:4] + "…" + s[-4:]
+
+
+@api_router.get("/settings")
+async def get_settings():
+    s = await _get_settings()
+    return {
+        "telegram_bot_token_masked": _mask(s.get("telegram_bot_token", "")),
+        "telegram_chat_id": s.get("telegram_chat_id", ""),
+        "groww_api_token_masked": _mask(s.get("groww_api_token", "")),
+        "telegram_configured": bool(s.get("telegram_bot_token") and s.get("telegram_chat_id")),
+        "groww_configured": bool(s.get("groww_api_token")),
+    }
+
+
+@api_router.put("/settings")
+async def update_settings(inp: Settings):
+    update = {}
+    for k, v in inp.model_dump().items():
+        if v is not None and v.strip() != "":
+            update[k] = v.strip()
+    if update:
+        await db.settings.update_one({"id": SETTINGS_ID}, {"$set": update}, upsert=True)
+    return await get_settings()
+
+
+async def _send_telegram(text: str) -> tuple[bool, str]:
+    s = await _get_settings()
+    token = s.get("telegram_bot_token")
+    chat_id = s.get("telegram_chat_id")
+    if not token or not chat_id:
+        return False, "Telegram not configured"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"})
+            data = r.json()
+            if data.get("ok"):
+                return True, "sent"
+            return False, str(data)
+    except Exception as e:
+        return False, str(e)
+
+
+@api_router.post("/settings/telegram/test")
+async def test_telegram():
+    ok, msg = await _send_telegram(
+        "<b>Bharat Trade Agent</b>\nTelegram is connected. You'll receive price alerts here. ✅"
+    )
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"ok": True}
+
+
+# ============ Alerts ============
+class AlertCreate(BaseModel):
+    symbol: str
+    alert_type: str  # "target" | "stop_loss" | "pct_change"
+    threshold: float  # price for target/stop; percent for pct_change (e.g., 5 = ±5%)
+    note: Optional[str] = ""
+
+
+class Alert(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    symbol: str
+    alert_type: str
+    threshold: float
+    note: str = ""
+    active: bool = True
+    last_triggered_at: Optional[str] = None
+    triggered_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+@api_router.get("/alerts")
+async def list_alerts():
+    docs = await db.alerts.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"alerts": docs}
+
+
+@api_router.post("/alerts")
+async def create_alert(inp: AlertCreate):
+    if inp.alert_type not in ("target", "stop_loss", "pct_change"):
+        raise HTTPException(400, "invalid alert_type")
+    a = Alert(**inp.model_dump())
+    a.symbol = display_symbol(normalize_symbol(a.symbol))
+    await db.alerts.insert_one(a.model_dump())
+    return a
+
+
+@api_router.delete("/alerts/{alert_id}")
+async def delete_alert(alert_id: str):
+    res = await db.alerts.delete_one({"id": alert_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "not found")
+    return {"ok": True}
+
+
+@api_router.patch("/alerts/{alert_id}/toggle")
+async def toggle_alert(alert_id: str):
+    doc = await db.alerts.find_one({"id": alert_id})
+    if not doc:
+        raise HTTPException(404, "not found")
+    await db.alerts.update_one({"id": alert_id}, {"$set": {"active": not doc.get("active", True)}})
+    return await db.alerts.find_one({"id": alert_id}, {"_id": 0})
+
+
+async def _check_alerts_once() -> Dict[str, Any]:
+    """Iterate active alerts, fetch quotes, trigger + send Telegram if condition met."""
+    docs = await db.alerts.find({"active": True}, {"_id": 0}).to_list(500)
+    if not docs:
+        return {"checked": 0, "triggered": 0}
+
+    symbols = list({normalize_symbol(d["symbol"]) for d in docs})
+    quotes = await asyncio.gather(*[fetch_quote(s) for s in symbols])
+    qmap = {q["symbol"]: q for q in quotes}
+
+    triggered = 0
+    for a in docs:
+        sym = normalize_symbol(a["symbol"])
+        q = qmap.get(sym)
+        if not q or not q.get("price"):
+            continue
+        price = q["price"]
+        change_pct = q.get("change_pct", 0)
+        hit = False
+        message = ""
+        if a["alert_type"] == "target" and price >= a["threshold"]:
+            hit = True
+            message = f"🎯 <b>TARGET HIT: {a['symbol']}</b>\nLTP ₹{price} ≥ Target ₹{a['threshold']}"
+        elif a["alert_type"] == "stop_loss" and price <= a["threshold"]:
+            hit = True
+            message = f"🛑 <b>STOP-LOSS: {a['symbol']}</b>\nLTP ₹{price} ≤ Stop ₹{a['threshold']}"
+        elif a["alert_type"] == "pct_change" and abs(change_pct) >= a["threshold"]:
+            hit = True
+            direction = "↑" if change_pct > 0 else "↓"
+            message = f"⚡ <b>{a['symbol']} moved {direction}{abs(change_pct):.2f}%</b>\nLTP ₹{price}"
+
+        if hit:
+            # de-dupe: skip if triggered within last 4 hours
+            last = a.get("last_triggered_at")
+            skip = False
+            if last:
+                try:
+                    dt = datetime.fromisoformat(last)
+                    if (datetime.now(timezone.utc) - dt).total_seconds() < 4 * 3600:
+                        skip = True
+                except Exception:
+                    pass
+            if not skip:
+                if a.get("note"):
+                    message += f"\n<i>{a['note']}</i>"
+                ok, _ = await _send_telegram(message)
+                triggered += 1
+                await db.alerts.update_one(
+                    {"id": a["id"]},
+                    {"$set": {"last_triggered_at": datetime.now(timezone.utc).isoformat()},
+                     "$inc": {"triggered_count": 1}},
+                )
+    return {"checked": len(docs), "triggered": triggered}
+
+
+@api_router.post("/alerts/check")
+async def check_alerts_now():
+    return await _check_alerts_once()
+
+
+# ============ Groww broker sync ============
+@api_router.post("/broker/groww/sync")
+async def groww_sync():
+    s = await _get_settings()
+    token = s.get("groww_api_token")
+    if not token:
+        raise HTTPException(400, "Groww API token not configured. Add it in Settings.")
+    try:
+        # Lazy import — heavy library
+        from growwapi import GrowwAPI  # type: ignore
+    except Exception as e:
+        raise HTTPException(500, f"growwapi library unavailable: {e}")
+
+    def _pull():
+        try:
+            g = GrowwAPI(token)
+            return g.get_holdings_for_user(timeout=10)
+        except Exception as ex:
+            return {"error": str(ex)}
+
+    result = await asyncio.to_thread(_pull)
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(400, f"Groww fetch failed: {result['error']}")
+
+    # Normalize: growwapi returns list-like with fields symbol/quantity/average_price
+    items = result if isinstance(result, list) else result.get("holdings", [])
+    imported = 0
+    for it in items or []:
+        sym = (it.get("trading_symbol") or it.get("symbol") or "").upper()
+        qty = float(it.get("quantity") or it.get("qty") or 0)
+        avg = float(it.get("average_price") or it.get("avg_price") or 0)
+        if not sym or qty <= 0 or avg <= 0:
+            continue
+        existing = await db.holdings.find_one({"symbol": sym})
+        if existing:
+            await db.holdings.update_one({"id": existing["id"]}, {"$set": {"quantity": qty, "buy_price": avg}})
+        else:
+            h = Holding(symbol=sym, quantity=qty, buy_price=avg)
+            await db.holdings.insert_one(h.model_dump())
+        imported += 1
+    return {"ok": True, "imported": imported}
+
+
+# ============ Scheduler ============
+scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
+
+
+async def _scheduled_check():
+    try:
+        r = await _check_alerts_once()
+        if r.get("triggered", 0) > 0:
+            logger.info(f"Alerts scheduled check: {r}")
+    except Exception as e:
+        logger.warning(f"Scheduled check failed: {e}")
+
+
+@app.on_event("startup")
+async def _start_scheduler():
+    # Every 5 minutes, Mon-Fri, 9:15-15:30 IST
+    scheduler.add_job(
+        _scheduled_check,
+        CronTrigger(minute="*/5", hour="9-15", day_of_week="mon-fri", timezone="Asia/Kolkata"),
+        id="alerts_check", replace_existing=True, coalesce=True, max_instances=1,
+    )
+    scheduler.start()
+    logger.info("Scheduler started (alerts_check every 5 min IST, market hours).")
 
 
 # Include router
