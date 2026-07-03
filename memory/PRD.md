@@ -28,14 +28,15 @@ Indian retail investor tracking NSE/BSE equities who wants AI-driven analysis on
 - Manual add/delete holdings; ticker-tape indices bar (NIFTY/SENSEX/BANKNIFTY/NIFTY IT)
 - Watchlist with live quotes
 - AI Trade Agent panel: 3 columns (Safe Exits / New Buys / Long-term Value Picks) + portfolio health strip
+- **Price Alerts (Telegram)** — target price, stop-loss, ±% change · APScheduler runs checks every 5 min IST during 9:15am–3:30pm Mon–Fri · de-dup 4hr window
+- **Groww broker linking** — Settings dialog stores encrypted token (masked in reads) · `/api/broker/groww/sync` imports holdings via `growwapi` SDK · UI shows subscription & static-IP whitelisting instructions
 
 ## Backlog (P1 / P2)
 - CSV import of holdings
 - Individual stock detail view with sparkline (backend already returns history)
-- Alerts (target price / stop loss) with email/telegram
 - Sector allocation pie & concentration risk metrics
 - Auth (JWT or Emergent Google) for multi-user portfolios
-- Kite / Upstox broker linking for auto-sync
+- Explicit clear endpoint for Telegram/Groww tokens (currently partial-update only)
 
 ## Non-goals
 - Automated order placement (never touch broker APIs for execution in v1)
